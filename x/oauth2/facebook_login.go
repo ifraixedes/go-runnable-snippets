@@ -41,22 +41,23 @@ func main() {
 	}
 
 	var (
-		redirectURL       = "http://" + *addr + "/facebook"
-		fbPermissionsList = strings.Split(*fbPermissions, ",")
+		fbConfig = oauth2.Config{
+			ClientID:     *fbClientID,
+			ClientSecret: *fbClientSecret,
+			RedirectURL:  "http://" + *addr + "/facebook",
+			Scopes:       strings.Split(*fbPermissions, ","),
+			Endpoint:     facebook.Endpoint,
+		}
 	)
-	http.Handle(
-		"/", homeHandler(*fbClientID, *fbClientSecret, redirectURL, fbPermissionsList),
-	)
-	http.Handle("/facebook", facebookHandler())
+	http.Handle("/", homeHandler(fbConfig))
+	http.Handle("/facebook", facebookHandler(fbConfig))
 
-	log.Printf("Facebook login will be redirected to: %s", redirectURL)
+	log.Printf("Facebook login will be redirected to: %s", fbConfig.RedirectURL)
 	log.Printf("Server listening on %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
 
-func homeHandler(
-	fbClientID, fbClientSecret, redirectURL string, fbPermissions []string,
-) http.Handler {
+func homeHandler(fbConfig oauth2.Config) http.Handler {
 	const bodyHTML = `<html>
 	<head>
 		<title>Facebook login example</title>	
@@ -67,26 +68,30 @@ func homeHandler(
 			<a href="https://godoc.org/golang.org/x/oauth2">golang.org/x/oauth2</a>
 			package
 		</p>
-		<a href="%s">Login with Facebook</a>
+		<p>Facebook doesn't do anything different if it's used
+			<prea<cod>oauth2.AccessTypeOnline</code></pre>  or
+			<prea<cod>oauth2.AccessTypeOffline</code></pre>, take yourself a look
+			<br>
+			<a href="%[1]s">Login with Facebook (access type <b>online</b>)</a>
+			<br>
+			<a href="%[2]s">Login with Facebook (access type <b>offline</b>)</a>
+		</p>
 	</body>
 </html>
 `
 
-	var (
-		fbConfig = oauth2.Config{
-			ClientID:     fbClientID,
-			ClientSecret: fbClientSecret,
-			RedirectURL:  redirectURL,
-			Scopes:       fbPermissions,
-			Endpoint:     facebook.Endpoint,
-		}
-		csrfToken = "should-be-secure-token-for-csrf-attakcs-protection"
-	)
-
+	var csrfToken = "should-be-secure-token-for-csrf-attakcs-protection"
 	var h = func(w http.ResponseWriter, r *http.Request) {
-		var loginURL = fbConfig.AuthCodeURL(csrfToken)
+		var loginOnlineURL = fbConfig.AuthCodeURL(csrfToken, oauth2.ApprovalForce)
+		var loginOfflineURL = fbConfig.AuthCodeURL(
+			csrfToken, oauth2.AccessTypeOffline, oauth2.ApprovalForce,
+		)
 
-		if _, err := w.Write([]byte(fmt.Sprintf(bodyHTML, loginURL))); err != nil {
+		if _, err := w.Write(
+			[]byte(
+				fmt.Sprintf(bodyHTML, loginOnlineURL, loginOfflineURL),
+			),
+		); err != nil {
 			log.Printf("Error when writing Home page response body. Err= %+v", err)
 		}
 	}
@@ -94,10 +99,12 @@ func homeHandler(
 	return http.HandlerFunc(h)
 }
 
-func facebookHandler() http.Handler {
+func facebookHandler(fbConfig oauth2.Config) http.Handler {
 	type bodyData struct {
 		RequestURL     string
 		RequestHeaders http.Header
+		AuthCode       string
+		Token          *oauth2.Token
 	}
 
 	var bodyHTMLTpl = template.Must(template.New("pageBody").Parse(`<html>
@@ -114,6 +121,14 @@ func facebookHandler() http.Handler {
 {{ range $v := $values}}{{$v}}
 {{end}}</pre>
 				{{end}}
+			</li>
+			<li>Token generated from Code ({{.AuthCode}}):
+				<ul>
+					<li>Access Token: {{.Token.AccessToken}}</li>
+					<li>TokenType: {{.Token.TokenType}}</li>
+					<li>Refresh Token: {{.Token.RefreshToken}}</li>
+					<li>Expiry: {{.Token.Expiry}}</li>
+				</ul>
 			</li>
 		</ul>
 	</body>
@@ -135,10 +150,11 @@ func facebookHandler() http.Handler {
 		var (
 			err      error
 			pageBody bytes.Buffer
+			fbCode   = r.FormValue("code")
+			token    *oauth2.Token
 		)
 
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+		if token, err = fbConfig.Exchange(r.Context(), fbCode); err != nil {
 			if _, err := w.Write([]byte(fmt.Sprintf(errorBodyHTML, err))); err != nil {
 				log.Printf("Error when writing page response body. Err= %+v", err)
 			}
@@ -148,6 +164,8 @@ func facebookHandler() http.Handler {
 		bodyHTMLTpl.Execute(&pageBody, bodyData{
 			RequestURL:     r.URL.String(),
 			RequestHeaders: r.Header,
+			AuthCode:       fbCode,
+			Token:          token,
 		})
 
 		if _, err := w.Write(pageBody.Bytes()); err != nil {
