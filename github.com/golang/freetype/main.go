@@ -4,12 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/golang/freetype"
@@ -29,7 +31,8 @@ func main() {
 		yPos = flagSet.Uint(
 			"ypos", 90, "% to the image height to place the beginning of the message",
 		)
-		textMsg = flagSet.String(
+		fontColor = flagSet.String("color", "ffffffff", "The text color to use (RGBA)")
+		textMsg   = flagSet.String(
 			"msg", "Default message", "The message to draw on the image",
 		)
 	)
@@ -46,6 +49,53 @@ func main() {
 		exitWithInvalidCmdParamValue(
 			flagSet, "positions must be a value between 0 and 100",
 		)
+	}
+
+	var red, green, blue, alpha uint8
+	if len(*fontColor) > 8 || len(*fontColor) < 8 {
+		exitWithInvalidCmdParamValue(
+			flagSet, "fontColor must be a 4 hexadecimals of two characters",
+		)
+	} else {
+		if r, err := strconv.ParseUint((*fontColor)[0:2], 16, 8); err != nil {
+			exitWithInvalidCmdParamValue(
+				flagSet,
+				"Invalid fontColor, red component isn't a hexadecimal number between (0 and FF). err= %+v",
+				err,
+			)
+		} else {
+			red = uint8(r)
+		}
+
+		if g, err := strconv.ParseUint((*fontColor)[2:4], 16, 8); err != nil {
+			exitWithInvalidCmdParamValue(
+				flagSet,
+				"Invalid fontColor, green component isn't a hexadecimal number between (0 and FF). err= %+v",
+				err,
+			)
+		} else {
+			green = uint8(g)
+		}
+
+		if b, err := strconv.ParseUint((*fontColor)[4:6], 16, 8); err != nil {
+			exitWithInvalidCmdParamValue(
+				flagSet,
+				"Invalid fontColor, blue component isn't a hexadecimal number between (0 and FF). err= %+v",
+				err,
+			)
+		} else {
+			blue = uint8(b)
+		}
+
+		if a, err := strconv.ParseUint((*fontColor)[6:8], 16, 8); err != nil {
+			exitWithInvalidCmdParamValue(
+				flagSet,
+				"Invalid fontColor, alpha component isn't a hexadecimal number between (0 and FF). err= %+v",
+				err,
+			)
+		} else {
+			alpha = uint8(a)
+		}
 	}
 
 	var dstImgFormat string
@@ -91,13 +141,11 @@ func main() {
 	}
 
 	var (
-		bounds     = srcImg.Bounds()
-		width  int = bounds.Dx()
-		height int = bounds.Dy()
-		dstImg     = image.NewRGBA(
-			image.Rect(0, 0, width, height),
-		)
-		msgStartPoint = fixed.Point26_6{
+		bounds            = srcImg.Bounds()
+		width         int = bounds.Dx()
+		height        int = bounds.Dy()
+		dstImg            = image.NewRGBA(image.Rect(0, 0, width, height))
+		msgStartPoint     = fixed.Point26_6{
 			X: fixed.I(width * int(*xPos) / 100),
 			Y: fixed.I(height * int(*yPos) / 100),
 		}
@@ -108,7 +156,7 @@ func main() {
 	draw.Draw(dstImg, bounds, srcImg, bounds.Min, draw.Src)
 
 	// Draw text
-	ctx.SetSrc(srcImg)
+	ctx.SetSrc(image.NewUniform(color.RGBA{red, green, blue, alpha}))
 	ctx.SetDst(dstImg)
 	ctx.SetClip(bounds)
 	ctx.SetFont(font)
