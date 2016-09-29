@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/draw"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
@@ -22,7 +23,13 @@ func main() {
 		srcImgPath = flagSet.String("src", "", "Path to the source image file")
 		dstImgPath = flagSet.String("dst", "", "Path to the destination image file")
 		fontPath   = flagSet.String("font", "", "Path to the ttf/ttc font file")
-		textMsg    = flagSet.String(
+		xPos       = flagSet.Uint(
+			"xpos", 5, "% to image width to place the beginning of the message",
+		)
+		yPos = flagSet.Uint(
+			"ypos", 90, "% to the image height to place the beginning of the message",
+		)
+		textMsg = flagSet.String(
 			"msg", "Default message", "The message to draw on the image",
 		)
 	)
@@ -32,6 +39,12 @@ func main() {
 	if *srcImgPath == "" || *dstImgPath == "" || *fontPath == "" {
 		exitWithInvalidCmdParamValue(
 			flagSet, "Font file path, Source and destination image paths are require",
+		)
+	}
+
+	if *xPos > 100 || *yPos > 100 {
+		exitWithInvalidCmdParamValue(
+			flagSet, "positions must be a value between 0 and 100",
 		)
 	}
 
@@ -78,22 +91,28 @@ func main() {
 	}
 
 	var (
-		width  int = srcImg.Bounds().Dx()
-		height int = srcImg.Bounds().Dy()
+		bounds     = srcImg.Bounds()
+		width  int = bounds.Dx()
+		height int = bounds.Dy()
 		dstImg     = image.NewRGBA(
 			image.Rect(0, 0, width, height),
 		)
 		msgStartPoint = fixed.Point26_6{
-			X: fixed.Int26_6(width / 10),
-			Y: fixed.Int26_6(height - height/4),
+			X: fixed.I(width * int(*xPos) / 100),
+			Y: fixed.I(height * int(*yPos) / 100),
 		}
 		ctx = freetype.NewContext()
 	)
 
+	// Copy source image to a destination
+	draw.Draw(dstImg, bounds, srcImg, bounds.Min, draw.Src)
+
+	// Draw text
 	ctx.SetSrc(srcImg)
 	ctx.SetDst(dstImg)
+	ctx.SetClip(bounds)
 	ctx.SetFont(font)
-	ctx.SetFontSize(20)
+	ctx.SetFontSize(30)
 	if _, err := ctx.DrawString(*textMsg, msgStartPoint); err != nil {
 		fmt.Printf(
 			"Error drawing the message into the image. %s. error= %+v\n",
