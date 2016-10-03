@@ -32,6 +32,8 @@ func main() {
 			"ypos", 90, "% to the image height to place the beginning of the message",
 		)
 		fontColor = flagSet.String("color", "ffffffff", "The text color to use (RGBA)")
+		fontSize  = flagSet.Float64("font-size", 30, "The font size to use")
+		dpi       = flagSet.Float64("dpi", 72, "The dot per inch (DPI)")
 		textMsg   = flagSet.String(
 			"msg", "Default message", "The message to draw on the image",
 		)
@@ -49,6 +51,14 @@ func main() {
 		exitWithInvalidCmdParamValue(
 			flagSet, "positions must be a value between 0 and 100",
 		)
+	}
+
+	if *fontSize <= 0 {
+		exitWithInvalidCmdParamValue(flagSet, "font size must be greater than 0")
+	}
+
+	if *dpi <= 0 {
+		exitWithInvalidCmdParamValue(flagSet, "DPI must be greater than 0")
 	}
 
 	var red, green, blue, alpha uint8
@@ -160,7 +170,8 @@ func main() {
 	ctx.SetDst(dstImg)
 	ctx.SetClip(bounds)
 	ctx.SetFont(font)
-	ctx.SetFontSize(30)
+	ctx.SetFontSize(*fontSize)
+	ctx.SetDPI(*dpi)
 	if _, err := ctx.DrawString(*textMsg, msgStartPoint); err != nil {
 		fmt.Printf(
 			"Error drawing the message into the image. %s. error= %+v\n",
