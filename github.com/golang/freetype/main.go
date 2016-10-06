@@ -201,11 +201,10 @@ func exitWithInvalidCmdParamValue(fs *flag.FlagSet, msg string, fArgs ...interfa
 func saveImage(filenamePath, format string, img image.Image) error {
 	var file, err = os.Create(filenamePath)
 	if err != nil {
-		return fmt.Errorf(
-			"Create file error. %s. error= %+v",
-			err.Error(), err,
-		)
+		return fmt.Errorf("Create file error. %s. error= %+v", err.Error(), err)
 	}
+
+	defer file.Close()
 
 	switch format {
 	case "png":
